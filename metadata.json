@@ -1,0 +1,6 @@
+{
+  "name": "My File",
+  "description": "A powerful and polished file manager app with category browsing, storage stats, file cleanup, and tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
