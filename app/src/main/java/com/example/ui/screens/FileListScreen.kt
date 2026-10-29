@@ -37,6 +37,7 @@ fun FileListScreen(
     var editingFile by remember { mutableStateOf<FileEntity?>(null) }
     var viewingImage by remember { mutableStateOf<FileEntity?>(null) }
     var viewingZip by remember { mutableStateOf<FileEntity?>(null) }
+    var viewingPdf by remember { mutableStateOf<FileEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showCreateZipDialog by remember { mutableStateOf(false) }
 
@@ -63,6 +64,15 @@ fun FileListScreen(
             file = viewingZip!!,
             viewModel = viewModel,
             onBack = { viewingZip = null }
+        )
+        return
+    }
+
+    if (viewingPdf != null) {
+        PdfViewerScreen(
+            file = viewingPdf!!,
+            viewModel = viewModel,
+            onBack = { viewingPdf = null }
         )
         return
     }
@@ -116,8 +126,11 @@ fun FileListScreen(
                         file = file,
                         onClick = {
                             when {
-                                file.mimeType.startsWith("image/") || file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true) -> {
+                                file.mimeType.startsWith("image/") || file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true) || file.name.endsWith(".jpeg", true) -> {
                                     viewingImage = file
+                                }
+                                file.mimeType.contains("pdf") || file.name.endsWith(".pdf", true) -> {
+                                    viewingPdf = file
                                 }
                                 file.mimeType.contains("zip") || file.mimeType.contains("compressed") || file.name.endsWith(".zip", true) || file.name.endsWith(".rar", true) -> {
                                     viewingZip = file
