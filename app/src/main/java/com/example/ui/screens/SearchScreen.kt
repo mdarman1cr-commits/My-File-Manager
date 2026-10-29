@@ -90,15 +90,52 @@ fun SearchScreen(
             onToggleSafe = { viewModel.moveToSafeFolder(file, !file.isSafe) },
             onRename = { newName -> viewModel.renameFile(file, newName) },
             onDelete = { viewModel.deleteFile(file) },
+            onOpenWith = {
+                try {
+                    val fileObj = java.io.File(file.path)
+                    val uri = if (fileObj.exists()) {
+                        androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            fileObj
+                        )
+                    } else {
+                        android.net.Uri.parse(file.path)
+                    }
+                    val viewIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, file.mimeType.ifEmpty { "*/*" })
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(viewIntent, "Open with"))
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "No app available to open this file", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
             onShare = {
                 try {
+                    val fileObj = java.io.File(file.path)
+                    val uri = if (fileObj.exists()) {
+                        androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            fileObj
+                        )
+                    } else {
+                        null
+                    }
                     val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
-                        putExtra(android.content.Intent.EXTRA_TEXT, "Sharing file: ${file.name}")
+                        type = file.mimeType.ifEmpty { "*/*" }
+                        if (uri != null) {
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        } else {
+                            putExtra(android.content.Intent.EXTRA_TEXT, "Sharing file: ${file.name}")
+                        }
                     }
                     context.startActivity(android.content.Intent.createChooser(shareIntent, "Share file via"))
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Unable to share file", android.widget.Toast.LENGTH_SHORT).show()
+                }
             },
             onExtract = if (file.name.endsWith(".zip")) {
                 {

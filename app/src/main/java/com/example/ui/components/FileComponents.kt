@@ -141,6 +141,7 @@ fun FileActionBottomSheet(
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
+    onOpenWith: () -> Unit,
     onExtract: (() -> Unit)? = null
 ) {
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -174,6 +175,15 @@ fun FileActionBottomSheet(
                     }
                 )
             }
+            NavigationDrawerItem(
+                label = { Text("Open With...") },
+                selected = false,
+                icon = { Icon(Icons.Default.OpenInNew, contentDescription = null) },
+                onClick = {
+                    onOpenWith()
+                    onDismiss()
+                }
+            )
             NavigationDrawerItem(
                 label = { Text("Share") },
                 selected = false,

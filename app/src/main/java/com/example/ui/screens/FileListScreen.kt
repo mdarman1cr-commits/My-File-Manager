@@ -117,12 +117,47 @@ fun FileListScreen(
             onToggleSafe = { viewModel.moveToSafeFolder(file, !file.isSafe) },
             onRename = { newName -> viewModel.renameFile(file, newName) },
             onDelete = { viewModel.deleteFile(file) },
+            onOpenWith = {
+                try {
+                    val fileObj = java.io.File(file.path)
+                    val uri = if (fileObj.exists()) {
+                        androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            fileObj
+                        )
+                    } else {
+                        android.net.Uri.parse(file.path)
+                    }
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, file.mimeType.ifEmpty { "*/*" })
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(viewIntent, "Open with"))
+                } catch (e: Exception) {
+                    Toast.makeText(context, "No app available to open this file", Toast.LENGTH_SHORT).show()
+                }
+            },
             onShare = {
                 try {
+                    val fileObj = java.io.File(file.path)
+                    val uri = if (fileObj.exists()) {
+                        androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            fileObj
+                        )
+                    } else {
+                        null
+                    }
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, file.name)
-                        putExtra(Intent.EXTRA_TEXT, "Sharing file: ${file.name} (${file.path})\n\n${file.content}")
+                        type = file.mimeType.ifEmpty { "*/*" }
+                        if (uri != null) {
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        } else {
+                            putExtra(Intent.EXTRA_TEXT, "Sharing file: ${file.name}")
+                        }
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Share file via"))
                 } catch (e: Exception) {
