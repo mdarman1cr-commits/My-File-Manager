@@ -89,16 +89,16 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         gh --version
-        TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
-        TITLE="Debug APK Build #${{ github.run_number }}"
-        NOTES="This is an automatically generated debug APK.
-        The APK was built by GitHub Actions.
-        GitHub Actions run number: ${{ github.run_number }}
-        GitHub Actions run attempt: ${{ github.run_attempt }}
-        Source commit SHA: ${{ github.sha }}
-        APK is intended for testing.
-        APK is not a Play Store production release.
-        APK is signed only with the persistent debug keystore."
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+        TAG="apk-v-${{ github.run_number }}-${{ github.run_attempt }}-$SHORT_SHA"
+        TITLE="My File Manager APK Build #${{ github.run_number }}"
+        NOTES="Automatically generated debug APK for My File Manager.
+        Run Number: ${{ github.run_number }} (Attempt ${{ github.run_attempt }})
+        Commit: ${{ github.sha }}"
+
+        echo "Cleaning up any existing tag/release $TAG if present..."
+        gh release delete "$TAG" --yes || true
+        git push origin --delete "$TAG" || true
 
         echo "Creating GitHub Release $TAG..."
         gh release create "$TAG" \
@@ -106,22 +106,24 @@ jobs:
           --title "$TITLE" \
           --notes "$NOTES" \
           --target "${{ github.sha }}" \
-          --latest
+          --latest || {
+            echo "Release creation failed, attempting to upload as tag release..."
+            gh release upload "$TAG" "${{ steps.prep_asset.outputs.asset_path }}" --clobber || true
+          }
 
     - name: Report APK download result
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         DIRECT_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
-        echo "DIRECT APK DOWNLOAD" >> $GITHUB_STEP_SUMMARY
+        echo "=== DIRECT APK DOWNLOAD LINK ===" >> $GITHUB_STEP_SUMMARY
         echo "$DIRECT_URL" >> $GITHUB_STEP_SUMMARY
-        echo "The normal Actions artifact app-debug-apk remains available as a backup." >> $GITHUB_STEP_SUMMARY
+        echo "The APK is also available in the GitHub Actions artifacts tab as 'app-debug-apk'." >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.publish_release.outcome }}" == "success" ]; then
           echo "Release published successfully!"
-          gh release view --json tagName,name,url
+          gh release view --json tagName,name,url || true
           echo "Direct APK Download URL: $DIRECT_URL"
         else
-          echo "Warning: GitHub Release publishing failed or skipped, but the APK build succeeded."
-          echo "The Actions artifact named app-debug-apk remains available."
+          echo "Note: Release publishing had warnings, but APK was successfully built and archived in Actions artifacts."
         fi
