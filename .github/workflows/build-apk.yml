@@ -22,21 +22,8 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Verify Java environment
-      run: |
-        java -version
-        echo "JAVA_HOME=$JAVA_HOME"
-        JAVA_VERSION=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}' | awk -F'.' '{print $1}')
-        if [ "$JAVA_VERSION" -lt 17 ]; then
-          echo "Error: Java version 17 or newer is required, but found version $JAVA_VERSION"
-          exit 1
-        fi
-        echo "Java version check passed: $JAVA_VERSION"
-
-    - name: Setup Gradle 8.8
+    - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.8'
 
     - name: Make gradlew executable
       run: chmod +x gradlew
@@ -50,10 +37,6 @@ jobs:
           echo "Error: debug.keystore.base64 not found!"
           exit 1
         fi
-        if [ ! -f ./debug.keystore ]; then
-          echo "Error: Failed to create ./debug.keystore"
-          exit 1
-        fi
 
     - name: Build Debug APK
       run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
@@ -62,7 +45,6 @@ jobs:
       run: |
         if [ ! -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
           echo "Error: app-debug.apk not found at expected path."
-          echo "Searching inside app/build/outputs/apk:"
           find app/build/outputs/apk -name "*.apk"
           exit 1
         fi
@@ -75,55 +57,28 @@ jobs:
         path: app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: error
 
-    - name: Prepare APK release asset
-      id: prep_asset
-      run: |
-        RUN_DIR=$(mktemp -d)
-        cp app/build/outputs/apk/debug/app-debug.apk "$RUN_DIR/app-debug.apk"
-        echo "asset_path=$RUN_DIR/app-debug.apk" >> $GITHUB_OUTPUT
-
     - name: Publish APK to GitHub Releases
       id: publish_release
       continue-on-error: true
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh --version
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-        TAG="apk-v-${{ github.run_number }}-${{ github.run_attempt }}-$SHORT_SHA"
-        TITLE="My File Manager APK Build #${{ github.run_number }}"
-        NOTES="Automatically generated debug APK for My File Manager.
-        Run Number: ${{ github.run_number }} (Attempt ${{ github.run_attempt }})
-        Commit: ${{ github.sha }}"
+        TAG="apk-v-${{ github.run_number }}-$SHORT_SHA"
+        TITLE="File Manager APK Build #${{ github.run_number }}"
+        NOTES="Automatically generated debug APK for File Manager app."
 
-        echo "Cleaning up any existing tag/release $TAG if present..."
-        gh release delete "$TAG" --yes || true
+        # Delete release/tag if already exists
+        gh release delete "$TAG" --yes --cleanup-tag || true
         git push origin --delete "$TAG" || true
 
-        echo "Creating GitHub Release $TAG..."
-        gh release create "$TAG" \
-          "${{ steps.prep_asset.outputs.asset_path }}" \
+        gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
           --title "$TITLE" \
           --notes "$NOTES" \
-          --target "${{ github.sha }}" \
-          --latest || {
-            echo "Release creation failed, attempting to upload as tag release..."
-            gh release upload "$TAG" "${{ steps.prep_asset.outputs.asset_path }}" --clobber || true
-          }
+          --latest || echo "Release creation skipped or failed"
 
     - name: Report APK download result
-      env:
-        GH_TOKEN: ${{ github.token }}
       run: |
-        DIRECT_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
-        echo "=== DIRECT APK DOWNLOAD LINK ===" >> $GITHUB_STEP_SUMMARY
-        echo "$DIRECT_URL" >> $GITHUB_STEP_SUMMARY
-        echo "The APK is also available in the GitHub Actions artifacts tab as 'app-debug-apk'." >> $GITHUB_STEP_SUMMARY
-
-        if [ "${{ steps.publish_release.outcome }}" == "success" ]; then
-          echo "Release published successfully!"
-          gh release view --json tagName,name,url || true
-          echo "Direct APK Download URL: $DIRECT_URL"
-        else
-          echo "Note: Release publishing had warnings, but APK was successfully built and archived in Actions artifacts."
-        fi
+        echo "=== DIRECT APK DOWNLOAD & ARTIFACT INFO ===" >> $GITHUB_STEP_SUMMARY
+        echo "1. GitHub Actions Artifacts: Go to the 'Actions' tab in your repository, click on the latest workflow run, and download the 'app-debug-apk' artifact (ZIP file containing app-debug.apk)." >> $GITHUB_STEP_SUMMARY
+        echo "2. GitHub Releases: https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk" >> $GITHUB_STEP_SUMMARY
