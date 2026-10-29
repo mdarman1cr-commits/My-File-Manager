@@ -35,6 +35,8 @@ fun FileListScreen(
 
     var selectedFileForAction by remember { mutableStateOf<FileEntity?>(null) }
     var editingFile by remember { mutableStateOf<FileEntity?>(null) }
+    var viewingImage by remember { mutableStateOf<FileEntity?>(null) }
+    var viewingZip by remember { mutableStateOf<FileEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showCreateZipDialog by remember { mutableStateOf(false) }
 
@@ -43,6 +45,24 @@ fun FileListScreen(
             file = editingFile!!,
             viewModel = viewModel,
             onBack = { editingFile = null }
+        )
+        return
+    }
+
+    if (viewingImage != null) {
+        ImageViewerScreen(
+            file = viewingImage!!,
+            viewModel = viewModel,
+            onBack = { viewingImage = null }
+        )
+        return
+    }
+
+    if (viewingZip != null) {
+        ZipViewerScreen(
+            file = viewingZip!!,
+            viewModel = viewModel,
+            onBack = { viewingZip = null }
         )
         return
     }
@@ -95,10 +115,16 @@ fun FileListScreen(
                     FileItemRow(
                         file = file,
                         onClick = {
-                            if (file.mimeType.contains("html") || file.mimeType.contains("css") || file.mimeType.contains("javascript") || file.mimeType.contains("php") || file.mimeType.contains("xml") || file.mimeType.contains("json") || file.mimeType.contains("text") || file.name.endsWith(".html") || file.name.endsWith(".css") || file.name.endsWith(".js") || file.name.endsWith(".php") || file.name.endsWith(".xml") || file.name.endsWith(".json") || file.name.endsWith(".txt")) {
-                                editingFile = file
-                            } else {
-                                selectedFileForAction = file
+                            when {
+                                file.mimeType.startsWith("image/") || file.name.endsWith(".jpg", true) || file.name.endsWith(".png", true) -> {
+                                    viewingImage = file
+                                }
+                                file.mimeType.contains("zip") || file.mimeType.contains("compressed") || file.name.endsWith(".zip", true) || file.name.endsWith(".rar", true) -> {
+                                    viewingZip = file
+                                }
+                                else -> {
+                                    editingFile = file
+                                }
                             }
                         },
                         onMoreClick = { selectedFileForAction = file }
