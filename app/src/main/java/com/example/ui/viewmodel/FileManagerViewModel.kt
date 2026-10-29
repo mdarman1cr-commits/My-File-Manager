@@ -159,4 +159,63 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             onComplete("Created archive $finalName with ${selectedFiles.size} files successfully!")
         }
     }
+
+    private val _viewingExternalFile = MutableStateFlow<FileEntity?>(null)
+    val viewingExternalFile: StateFlow<FileEntity?> = _viewingExternalFile.asStateFlow()
+
+    fun openExternalFileUri(context: android.content.Context, uri: android.net.Uri, mimeType: String?) {
+        viewModelScope.launch {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val fileName = getFileNameFromUri(context, uri) ?: "imported_file"
+                val cacheFile = java.io.File(context.cacheDir, fileName)
+                inputStream?.use { input ->
+                    java.io.FileOutputStream(cacheFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                val detectedMime = mimeType ?: context.contentResolver.getType(uri) ?: "application/octet-stream"
+                val category = when {
+                    detectedMime.startsWith("image/") -> "Images"
+                    detectedMime.contains("pdf") -> "PDF"
+                    detectedMime.contains("zip") || detectedMime.contains("rar") || detectedMime.contains("compressed") -> "Zip/APK"
+                    detectedMime.startsWith("text/") || detectedMime.contains("json") || detectedMime.contains("xml") || detectedMime.contains("code") -> "Code"
+                    else -> "Document"
+                }
+                val fileEntity = FileEntity(
+                    name = fileName,
+                    path = cacheFile.absolutePath,
+                    size = cacheFile.length(),
+                    mimeType = detectedMime,
+                    category = category,
+                    dateModified = System.currentTimeMillis()
+                )
+                _viewingExternalFile.value = fileEntity
+            } catch (e: Exception) {
+                // handle error
+            }
+        }
+    }
+
+    fun clearExternalFile() {
+        _viewingExternalFile.value = null
+    }
+
+    private fun getFileNameFromUri(context: android.content.Context, uri: android.net.Uri): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        name = cursor.getString(nameIndex)
+                    }
+                }
+            }
+        }
+        if (name == null) {
+            name = uri.path?.let { java.io.File(it).name }
+        }
+        return name
+    }
 }
