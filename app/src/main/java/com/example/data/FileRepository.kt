@@ -1,6 +1,9 @@
 package com.example.data
 
+import android.content.Context
+import android.os.Environment
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 
 class FileRepository(private val fileDao: FileDao) {
     val allFiles: Flow<List<FileEntity>> = fileDao.getAllFiles()
@@ -16,27 +19,68 @@ class FileRepository(private val fileDao: FileDao) {
     suspend fun updateFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun deleteFile(file: FileEntity) = fileDao.deleteFile(file)
 
-    suspend fun insertDefaultFiles() {
-        val now = System.currentTimeMillis()
-        val defaults = listOf(
-            FileEntity(name = "Vacation_2026.jpg", path = "/Internal/Images/Vacation_2026.jpg", size = 3200000L, mimeType = "image/jpeg", category = "Images", dateModified = now - 100000L, isStarred = true),
-            FileEntity(name = "Sunset_Beach.png", path = "/Internal/Images/Sunset_Beach.png", size = 2400000L, mimeType = "image/png", category = "Images", dateModified = now - 200000L),
-            FileEntity(name = "Family_Portrait.jpg", path = "/Internal/Images/Family_Portrait.jpg", size = 4100000L, mimeType = "image/jpeg", category = "Images", dateModified = now - 300000L),
-            
-            FileEntity(name = "Project_Overview.mp4", path = "/Internal/Videos/Project_Overview.mp4", size = 128000000L, mimeType = "video/mp4", category = "Videos", dateModified = now - 400000L, isStarred = true),
-            FileEntity(name = "Tutorial_Kotlin.mkv", path = "/Internal/Videos/Tutorial_Kotlin.mkv", size = 450000000L, mimeType = "video/x-matroska", category = "Videos", dateModified = now - 500000L),
-            
-            FileEntity(name = "Acoustic_Guitar.mp3", path = "/Internal/Audio/Acoustic_Guitar.mp3", size = 8500000L, mimeType = "audio/mpeg", category = "Audio", dateModified = now - 600000L, isStarred = true),
-            FileEntity(name = "Podcast_Ep12.wav", path = "/Internal/Audio/Podcast_Ep12.wav", size = 42000000L, mimeType = "audio/wav", category = "Audio", dateModified = now - 700000L),
-            
-            FileEntity(name = "Project_Report.pdf", path = "/Internal/Document/Project_Report.pdf", size = 1500000L, mimeType = "application/pdf", category = "Document", dateModified = now - 800000L, isStarred = true),
-            FileEntity(name = "Budget_Q3.xlsx", path = "/Internal/Document/Budget_Q3.xlsx", size = 850000L, mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", category = "Document", dateModified = now - 900000L),
-            FileEntity(name = "Meeting_Notes.docx", path = "/Internal/Document/Meeting_Notes.docx", size = 450000L, mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document", category = "Document", dateModified = now - 950000L),
-            
-            FileEntity(name = "Setup_Installer.zip", path = "/Internal/Download/Setup_Installer.zip", size = 35000000L, mimeType = "application/zip", category = "Download", dateModified = now - 1100000L),
-            FileEntity(name = "Sample_App.apk", path = "/Internal/Zip/APK/Sample_App.apk", size = 18000000L, mimeType = "application/vnd.android.package-archive", category = "Zip/APK", dateModified = now - 1200000L, isStarred = true),
-            FileEntity(name = "Archive_Docs.rar", path = "/Internal/Zip/APK/Archive_Docs.rar", size = 22000000L, mimeType = "application/x-rar-compressed", category = "Zip/APK", dateModified = now - 1300000L)
-        )
-        fileDao.insertFiles(defaults)
+    suspend fun scanRealDeviceStorage(context: Context) {
+        try {
+            val rootDirs = listOf(
+                Environment.getExternalStorageDirectory(),
+                context.getExternalFilesDir(null),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+            )
+
+            val scannedFiles = mutableListOf<FileEntity>()
+            for (dir in rootDirs) {
+                if (dir != null && dir.exists() && dir.isDirectory) {
+                    dir.walkTopDown().maxDepth(3).forEach { file ->
+                        if (file.isFile) {
+                            val name = file.name
+                            val size = file.length()
+                            val path = file.absolutePath
+                            val mime = when {
+                                name.endsWith(".jpg", true) || name.endsWith(".png", true) -> "image/jpeg"
+                                name.endsWith(".mp4", true) || name.endsWith(".mkv", true) -> "video/mp4"
+                                name.endsWith(".mp3", true) || name.endsWith(".wav", true) -> "audio/mpeg"
+                                name.endsWith(".pdf", true) -> "application/pdf"
+                                name.endsWith(".zip", true) || name.endsWith(".rar", true) -> "application/zip"
+                                name.endsWith(".html", true) -> "text/html"
+                                name.endsWith(".css", true) -> "text/css"
+                                name.endsWith(".js", true) -> "application/javascript"
+                                name.endsWith(".php", true) -> "application/x-httpd-php"
+                                name.endsWith(".xml", true) -> "application/xml"
+                                name.endsWith(".json", true) -> "application/json"
+                                else -> "text/plain"
+                            }
+                            val category = when {
+                                mime.startsWith("image/") -> "Images"
+                                mime.startsWith("video/") -> "Videos"
+                                mime.startsWith("audio/") -> "Audio"
+                                mime.contains("pdf") || mime.contains("document") || mime.contains("sheet") || mime.contains("html") || mime.contains("css") || mime.contains("xml") || mime.contains("json") -> "Document"
+                                path.contains("Download", true) -> "Download"
+                                name.endsWith(".zip", true) || name.endsWith(".rar", true) || name.endsWith(".apk", true) -> "Zip/APK"
+                                else -> "Document"
+                            }
+                            scannedFiles.add(
+                                FileEntity(
+                                    name = name,
+                                    path = path,
+                                    size = size,
+                                    mimeType = mime,
+                                    category = category,
+                                    dateModified = file.lastModified()
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            if (scannedFiles.isNotEmpty()) {
+                fileDao.insertFiles(scannedFiles.distinctBy { it.path })
+            }
+        } catch (e: Exception) {
+            // Never crash
+        }
     }
 }

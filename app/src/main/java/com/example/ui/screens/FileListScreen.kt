@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,8 +34,18 @@ fun FileListScreen(
     val context = LocalContext.current
 
     var selectedFileForAction by remember { mutableStateOf<FileEntity?>(null) }
+    var editingFile by remember { mutableStateOf<FileEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showCreateZipDialog by remember { mutableStateOf(false) }
+
+    if (editingFile != null) {
+        CodeEditorScreen(
+            file = editingFile!!,
+            viewModel = viewModel,
+            onBack = { editingFile = null }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -83,7 +94,13 @@ fun FileListScreen(
                 items(files, key = { it.id }) { file ->
                     FileItemRow(
                         file = file,
-                        onClick = { selectedFileForAction = file },
+                        onClick = {
+                            if (file.mimeType.contains("html") || file.mimeType.contains("css") || file.mimeType.contains("javascript") || file.mimeType.contains("php") || file.mimeType.contains("xml") || file.mimeType.contains("json") || file.mimeType.contains("text") || file.name.endsWith(".html") || file.name.endsWith(".css") || file.name.endsWith(".js") || file.name.endsWith(".php") || file.name.endsWith(".xml") || file.name.endsWith(".json") || file.name.endsWith(".txt")) {
+                                editingFile = file
+                            } else {
+                                selectedFileForAction = file
+                            }
+                        },
                         onMoreClick = { selectedFileForAction = file }
                     )
                 }
@@ -105,7 +122,7 @@ fun FileListScreen(
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_SUBJECT, file.name)
-                        putExtra(Intent.EXTRA_TEXT, "Sharing file: ${file.name} (${file.path})")
+                        putExtra(Intent.EXTRA_TEXT, "Sharing file: ${file.name} (${file.path})\n\n${file.content}")
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Share file via"))
                 } catch (e: Exception) {
@@ -192,6 +209,14 @@ fun FileListScreen(
                             ".json" -> "application/json"
                             else -> if (selectedType == "Folder") "inode/directory" else "text/plain"
                         }
+                        val initialContent = when (extension) {
+                            ".html" -> "<!DOCTYPE html>\n<html>\n<head>\n\t<title>Page</title>\n</head>\n<body>\n\t<h1>Hello World</h1>\n</body>\n</html>"
+                            ".css" -> "body {\n\tbackground-color: #f0f0f0;\n}"
+                            ".js" -> "console.log('Hello World');"
+                            ".php" -> "<?php\n\techo 'Hello PHP';\n?>"
+                            ".json" -> "{\n\t\"key\": \"value\"\n}"
+                            else -> ""
+                        }
                         viewModel.addNewFile(
                             name = fullName,
                             category = category,
@@ -214,27 +239,56 @@ fun FileListScreen(
 
     if (showCreateZipDialog) {
         var zipName by remember { mutableStateOf("Archive_Combined.zip") }
+        val checkedFiles = remember { mutableStateMapOf<Long, Boolean>() }
 
         AlertDialog(
             onDismissRequest = { showCreateZipDialog = false },
             title = { Text("Create Zip Archive") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Combine files into a compressed zip archive:")
+                Column(
+                    modifier = Modifier.height(300.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedTextField(
                         value = zipName,
                         onValueChange = { zipName = it },
                         label = { Text("Archive Name") },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Select files to combine into zip:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    
+                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        items(files, key = { it.id }) { f ->
+                            val isChecked = checkedFiles[f.id] ?: false
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { checkedFiles[f.id] = !isChecked }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checkedFiles[f.id] = it }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(f.name, maxLines = 1, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (zipName.isNotBlank()) {
-                        viewModel.createZip(zipName) { msg ->
+                    val selectedList = files.filter { checkedFiles[it.id] == true }
+                    if (zipName.isNotBlank() && selectedList.isNotEmpty()) {
+                        viewModel.createZipFromSelected(zipName, selectedList) { msg ->
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
+                    } else {
+                        Toast.makeText(context, "Please select at least one file", Toast.LENGTH_SHORT).show()
                     }
                     showCreateZipDialog = false
                 }) {

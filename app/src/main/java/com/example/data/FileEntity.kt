@@ -8,13 +8,14 @@ data class FileEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val name: String,
     val path: String,
-    val size: Long, // in bytes
+    val size: Long,
     val mimeType: String,
-    val category: String, // "Images", "Videos", "Audio", "Document", "Download", "Zip/APK"
+    val category: String,
     val dateModified: Long,
     val isStarred: Boolean = false,
     val isSafe: Boolean = false,
     val isFolder: Boolean = false,
     val parentPath: String = "/",
-    val thumbnailUri: String? = null
+    val thumbnailUri: String? = null,
+    val content: String = ""
 )

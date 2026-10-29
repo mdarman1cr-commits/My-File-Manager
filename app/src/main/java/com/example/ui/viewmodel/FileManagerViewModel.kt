@@ -27,10 +27,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         val dao = AppDatabase.getDatabase(application).fileDao()
         repository = FileRepository(dao)
         viewModelScope.launch {
-            val all = dao.getAllFiles().first()
-            if (all.isEmpty()) {
-                repository.insertDefaultFiles()
-            }
+            repository.scanRealDeviceStorage(application)
         }
     }
 
@@ -136,6 +133,30 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
             )
             repository.insertFile(newZip)
             onComplete("Created archive $finalName successfully!")
+        }
+    }
+
+    fun updateFileContent(file: FileEntity, newContent: String, onComplete: () -> Unit) {
+        viewModelScope.launch {
+            repository.updateFile(file.copy(content = newContent, dateModified = System.currentTimeMillis()))
+            onComplete()
+        }
+    }
+
+    fun createZipFromSelected(zipName: String, selectedFiles: List<FileEntity>, onComplete: (String) -> Unit) {
+        viewModelScope.launch {
+            val finalName = if (zipName.endsWith(".zip")) zipName else "$zipName.zip"
+            val totalSize = selectedFiles.sumOf { it.size }.coerceAtLeast(1024L)
+            val newZip = FileEntity(
+                name = finalName,
+                path = "/Internal/Zip/APK/$finalName",
+                size = totalSize,
+                mimeType = "application/zip",
+                category = "Zip/APK",
+                dateModified = System.currentTimeMillis()
+            )
+            repository.insertFile(newZip)
+            onComplete("Created archive $finalName with ${selectedFiles.size} files successfully!")
         }
     }
 }
